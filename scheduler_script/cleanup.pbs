@@ -1,0 +1,16 @@
+#!/usr/bin/env bash
+
+# queue name
+#PBS -q    core12
+
+# node resources
+#PBS -l    nodes=1:ppn=12
+#PBS -l    mem=32gb
+
+# stdout/stderr output file
+#PBS -j    oe
+
+################################################################################
+
+echo "Remove $WORKSPACE"
+rm -rf "$WORKSPACE"

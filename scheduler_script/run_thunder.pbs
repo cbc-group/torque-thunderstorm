@@ -1,0 +1,66 @@
+#PBS -S    /bin/bash
+
+# queue name
+#PBS -q    core12
+
+# node resources
+#PBS -l    nodes=1:ppn=12
+#PBS -l    mem=32gb
+
+# stdout/stderr output file
+#PBS -j    oe
+
+################################################################################
+
+# force remove the lock files
+rm /tmp/ImageJ-* 
+
+# switch into .pbs directory
+cd "$WORKSPACE"
+
+# create temporary directory
+TMPDIR=`mktemp -d -p "$WORKSPACE"`
+if [[ ! "$TMPDIR" || ! -d "$TMPDIR" ]]; then
+   printf "Cannot create temporary directory\n"
+   exit 1
+fi
+# wipe the workspace upon exit
+function rmtmpdir {
+   rm -rf "$TMPDIR"
+   echo
+   printf "Temporary directory removed\n"
+}
+trap rmtmpdir EXIT 
+
+# retrieve the files to local temporary directory
+echo
+printf "Retrieving files from remote NFS\n"
+while read f; do
+    rsync -rv --progress warp:$f $TMPDIR
+done <"flist.$PBS_ARRAYID"
+# remove the file list
+rm -f flist.$PBS_ARRAYID
+
+################################################################################
+
+PARM="$TMPDIR"
+# verify whether we have z calibration file
+Z_CAL_PATH="$WORKSPACE"/cal.yaml
+if [ -e "$Z_CAL_PATH" ]; then 
+    PARM+=",""$Z_CAL_PATH"
+fi
+
+################################################################################
+
+echo "Launching Fiji with the macro"
+# change preference location to avoid file lock race condition
+export IJ_PREFS_DIR=$TMPDIR
+JAVA_OPTS="-Djava.util.prefs.userRoot=$TMPDIR -Djava.util.prefs.systemRoot=$TMPDIR"
+#IJ_BIN=debug
+IJ_BIN=ImageJ-linux64
+./xvfb-run-safe "$IJ_HOME"/"$IJ_BIN" $JAVA_OPTS --ij2 -debug -macro "$WORKSPACE"/macro.ijm "$PARM" 
+#"$IJ_HOME"/"$IJ_BIN" $JAVA_OPTS --java-home $JAVA_HOME --ij2 
+
+# transfer back to the workspace
+rsync -r --progress "$TMPDIR"/*.csv "$WORKSPACE"
+

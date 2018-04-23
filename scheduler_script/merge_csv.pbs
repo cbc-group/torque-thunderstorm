@@ -1,0 +1,28 @@
+#!/usr/bin/env bash
+
+# queue name
+#PBS -q    core12
+
+# node resources
+#PBS -l    nodes=1:ppn=12
+#PBS -l    mem=32gb
+
+# stdout/stderr output file
+#PBS -j    oe
+
+################################################################################
+
+echo
+
+cd "$WORKSPACE"
+
+echo ANGLE="$ANGLE"
+echo Z="$Z"
+
+# run the script
+printf "Merge all the CSV into a unified one\n"
+python3 "$WORKSPACE"/reduce.py --angle "$ANGLE" "$Z" "$WORKSPACE"
+
+# copy all the CSV files to the output directory
+printf "Transfer the result to remote NAS\n"
+rsync -r --progress merged.* warp:"$OUT_DIR"

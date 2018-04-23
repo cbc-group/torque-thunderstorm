@@ -1,0 +1,138 @@
+#!/usr/bin/env bash
+
+if [ "$#" -ne 3 ] || ! [ -d "$3" ]; then
+    echo "Usage: $0 Z ANGLE DIRECTORY" >&2
+    exit 1
+fi
+
+SRC_DIR=$3
+
+# parameters for ThunderSTORM
+MACRO=~/nas/script/localization.ijm
+OUT_DIR="$SRC_DIR"/output
+
+# parameters for CSV merging
+REDUCE_PY=~/nas/script/reduce.py
+Z=$1
+ANGLE=$2
+
+# nodes in the cluster
+N_NODES=3
+
+JOB_NAME=ij
+
+IJ_HOME=imagej
+
+################################################################################
+
+function info {
+    printf "\n$1\n"
+} 
+
+function cwd {
+    echo "$(cd "$(dirname "${BASE_SOURCE[0]}")" && pwd)"
+} 
+
+function abspath {
+    # $1: relative filename
+    echo "$(cd "$(dirname "$1")" && pwd)/$(basename "$1")"
+}
+
+function parsejid {
+    # $1: raw string
+    cut -d'.' -f1 <<< "$1"
+}
+
+################################################################################
+
+# remove old log files
+find ./* -maxdepth 1 -name "${JOB_NAME}-*" -exec rm -f {} \; > /dev/null 2>&1
+
+# create workspace
+WORKSPACE=`mktemp -d -p $(cwd)`
+export WORKSPACE=$(abspath "$WORKSPACE")
+if [[ ! "$WORKSPACE" || ! -d "$WORKSPACE" ]]; then
+    printf "Cannot create the workspace\n"
+    exit 1
+fi
+# wipe the workspace upon exit
+function rmworkspace {
+    rm -rf "$WORKSPACE"
+    echo
+    printf "Workspace removed\n"
+}
+# cannot cleanup the workspace through hook, due to the asynchronous nature
+#trap rmworkspace EXIT
+
+################################################################################
+
+# expand the source directory
+SRC_DIR=$(abspath "$SRC_DIR")
+# list all the files
+flist=("$SRC_DIR"/*.tif)
+# distribute the files
+echo 
+printf "Generating file list for each task\n"
+for (( i=0; i<${#flist[@]}; i++ )); do
+    n=$(expr $i % $N_NODES + 1)
+    echo "${flist[$i]}" >> "$WORKSPACE"/flist.$n
+done
+printf "... Distribute ${#flist[@]} files to $N_NODES nodes\n"
+
+# reduce number of deployed nodes if we don't have that much files
+if [[ ${#flist[@]} -lt $N_NODES ]]; then
+    N_NODES=${#flist[@]}
+fi
+
+################################################################################
+
+# copy the scripts to cluster NFS
+echo
+printf "Copy the scripts to cluster\n"
+MACRO=$(abspath "$MACRO")
+rsync -r --progress "$MACRO" "$WORKSPACE"/macro.ijm
+REDUCE_PY=$(abspath "$REDUCE_PY")
+rsync -r --progress "$REDUCE_PY" "$WORKSPACE"/reduce.py
+
+# copy the calibration file if exists
+for f in "$SRC_DIR"/*.yaml; do 
+    if [ -e "$f" ]; then 
+        rsync -r --progress "$f" "$WORKSPACE"/cal.yaml
+        break;
+    fi 
+done
+
+# copy safe script to the workspace
+cp xvfb-run-safe "$WORKSPACE"
+
+# expand and export rest of the variables
+export IJ_HOME=$(abspath "$IJ_HOME")
+
+################################################################################
+
+# submit the tasks
+echo
+printf "Submit an array of jobs\n"
+JID=$(qsub -N "$JOB_NAME"-run -t 1-$N_NODES -v IJ_HOME,WORKSPACE run_thunder.pbs)
+JID=$(parsejid "$JID")
+echo "... Job array has JID $JID"
+
+################################################################################
+
+export OUT_DIR=$(abspath "$OUT_DIR")
+export Z=$Z
+export ANGLE=$ANGLE
+
+# create output directory
+mkdir -p "$OUT_DIR"
+
+# wait for the jobs
+JID=$(qsub -N "$JOB_NAME"-merge -W depend=afterokarray:"$JID" -v WORKSPACE,OUT_DIR,Z,ANGLE merge_csv.pbs)
+JID=$(parsejid "$JID")
+echo "... Merger has JID $JID"
+
+################################################################################
+
+JID=$(qsub -N "$JOB_NAME"-cleanup -W depend=afterany:"$JID" -v WORKSPACE cleanup.pbs)
+JID=$(parsejid "$JID")
+echo "... Cleaner has JID $JID"
