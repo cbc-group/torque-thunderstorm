@@ -15,9 +15,6 @@ TBA
 ## Deployment
 Add additional notes about how to deploy this on a live system
 
-## Built With
-TBA
-
 ## Contributing
 Welcome to submit pull requests to us :D
 
