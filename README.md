@@ -5,7 +5,7 @@ Running ThunderSTORM on a Torque cluster.
 These instructions will get you a copy of the project up and running on your local machine for development and testing purposes. See deployment for notes on how to deploy the project on a live system.
 
 ### Prerequisites
-A Torque cluster, and a ImageJ distribution.
+A [Torque](http://www.adaptivecomputing.com/support/download-center/torque-download/) cluster, and a [ImageJ](https://imagej.nih.gov/ij/download.html) distribution.
 
 TODO: XVFB package
 
