@@ -28,4 +28,5 @@ Welcome to submit pull requests to us :D
 This project is licensed under the Apache License 2.0 - see the [LICENSE](LICENSE) file for details
 
 ## Acknowledgments
-TBA
+* [xvfb-run unreliable when multiple instances invoked in parallel
+](https://stackoverflow.com/a/30336424) - Source of the `xvfb-run-safe` script.
